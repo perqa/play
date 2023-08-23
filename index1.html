@@ -1,0 +1,94 @@
+<html>
+
+<head>
+  <style>
+    .ball {
+      border-radius: 10px;
+      width: 20px;
+      height: 20px;
+      position: absolute;
+      background-color: blue;
+      bottom: 0;
+      left: 0;
+    }
+
+    .enemy {
+      border-radius: 20px;
+      width: 40px;
+      height: 40px;
+      position: absolute;
+      background-color: red;
+    }
+  </style>
+    <script>
+      class ball {
+        constructor () {
+
+        }
+      }
+
+      window.onload = function () {
+        const ball = document.getElementById('ball');
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight-20;
+
+        let vh = 0;
+        let vv = 0
+        let ballBottom = 0;
+        let ballLeft = 0;
+        let vdir = 1;
+        let hdir = 1;
+        let gravitation = 0;
+        let level = 10;
+        const maxLevel = 10;
+        function jump() {
+          vdir = 1;
+          gravitation = 5;
+          level = Math.max(1, level-1);
+          vh = 2;
+        }
+
+        function enemy () {
+          let bottom = this.bottom || height;
+          this.vv = gravitation*Math.sqrt(height - pos);
+          this.pos += this.vv;
+        }
+
+        document.addEventListener('keydown', jump);
+
+        function loop() {
+          let allowedHeight = (maxLevel + 1 - level)*height/maxLevel;
+          let factor = Math.abs(allowedHeight - ballBottom)/allowedHeight;
+          vv = gravitation*Math.sqrt(factor);
+
+          ballBottom += vdir*vv;
+          ballLeft += hdir*vh;
+
+          if (ballBottom > allowedHeight) {
+            vdir = -1;
+          }
+          if (ballBottom < 0) {
+            level = Math.min(maxLevel, level+1);
+            vdir = 1;
+          }
+          if (ballLeft > width) {
+            hdir = -1;
+          }
+          if (ballLeft < 0) {
+            hdir = 1;
+          }
+
+          ball.style.bottom = Math.max(0, ballBottom) + 'px';
+          ball.style.left = Math.max(0, ballLeft) + 'px';
+          window.requestAnimationFrame(loop);
+        }
+        //loop();
+      }
+    </script>
+</head>
+
+<body>
+  <div id="ball" class="ball"></div>
+</body>
+
+</html>

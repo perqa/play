@@ -1,0 +1,423 @@
+<html>
+
+<head>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Gill Sans", sans-serif;
+    }
+
+    .ball {
+      border-radius: 10px;
+      width: 20px;
+      height: 20px;
+      position: absolute;
+      background-color: blue;
+      bottom: 0;
+      left: 0;
+    }
+
+    .alien {
+      border-radius: 20px;
+      width: 40px;
+      height: 40px;
+      position: absolute;
+      background-color: red;
+      color: white;
+      text-align: center;
+      line-height: 40px;
+      opacity:0.8;
+    }
+
+    .status {
+      position: absolute;
+      top:10px;
+      left:10px;
+      color:black;
+      font-weight: bold;
+    }
+
+    .status span {
+      width: 50px;
+      display: inline-block;
+    }
+
+    .number {
+      text-align: right;
+    }
+
+    #next {
+      font-size: xx-large;
+      position: absolute;
+      top:  50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      color: black;
+      display: block;
+    }
+
+  </style>
+    <script>
+
+      window.onload = function () {
+        // Declare shared variables and constants;
+        let WIDTH;
+        let HEIGHT;
+        let freeze = false;
+        let points = 0;
+        let level = 1;
+        let running = false;
+        let paused = false;
+
+        const query = window.location.search.split('=');
+        const isDevMode = query.length > 1 && query[0].indexOf('dev') > 0;
+        const scoreIndicator = document.getElementById('points');
+        const levelIndicator = document.getElementById('level');
+        const nextIndicator = document.getElementById('next');
+        const scoreBox = document.getElementById('pointsbox');
+
+        // Must be called initially and whenever window size changes
+        function setSize () {
+          WIDTH = document.body.clientWidth;
+          HEIGHT = document.body.clientHeight-20;
+        }
+
+        setSize();
+
+        function getRandomInt(max) {
+          return Math.floor(Math.random() * max);
+        }
+
+        // Detect collision between Defender and Alien
+        function isCollision(pos1,pos2) {
+          const distance = Math.sqrt((Math.abs(pos1.left+pos1.radius-(pos2.left+pos2.radius)))**2 + (Math.abs(pos1.bottom+pos1.radius-(pos2.bottom+pos2.radius)))**2);
+            return distance < pos1.radius + pos2.radius;
+        }
+
+        // Update points (a k a "life") and level
+        function updatePoints(newPoints) {
+          points += newPoints;
+          scoreIndicator.innerText = points;
+          levelIndicator.innerText = level;
+          if (points <= 10*level && points > 0) {
+            scoreBox.style.backgroundColor = 'orange';
+          } else if (points <= 0) {
+            scoreBox.style.backgroundColor = 'orangered';
+          } else {
+            scoreBox.style.backgroundColor = 'transparent';
+          }
+        }
+
+        // Show notification for next level
+        function updateLevel(visible) {
+          levelIndicator.innerText = level;
+          nextIndicator.innerText = 'Level ' + level;
+          nextIndicator.style.display = visible?'block':'none';
+        }
+
+        // Show Game Over dialog
+        function gameOver() {
+          nextIndicator.innerText = 'Game Over';
+          nextIndicator.style.display = 'block';
+          running = false;
+          points = 0;
+          level = 1;
+        }
+
+        // Start new game
+        function newGame() {
+          // Start new game
+          ball.reset();
+          updatePoints(0);
+          updateLevel(true);
+          alienManager.crop(true);
+          loop();
+        }
+
+        // Toggle between playing and paused mode
+        function togglePaused() {
+          if (!paused) {
+            nextIndicator.innerHTML = 'Game Paused<br>Press Enter to Resume';
+            nextIndicator.style.display = 'block';
+            alienManager.stop();
+            paused = true;
+          } else {
+            nextIndicator.style.display = 'none';
+            alienManager.next();
+            paused = false;
+            loop();
+          }
+
+        }
+
+        // Key handler
+        function keyHandler(e) {
+          if (e.keyCode === 13) { // Enter
+            if (!running) {
+              newGame();
+            } else {
+              togglePaused();
+            }
+          } else if (e.keyCode === 32) { // Space Bar
+            ball.jump();
+          } else if (isDevMode && e.keyCode >= 48 && e.keyCode <= 57) {
+            level = parseInt(e.key, 10);
+          }
+        }
+
+        // *******  Declare game objects  *********
+        // Defender object
+        class Ball {
+          constructor () {
+            this.radius = 10;
+            this.vh = 0;
+            this.vv = 0
+            this.bottom = 0;
+            this.left = 0;
+            this.vdir = 1;
+            this.hdir = 1;
+            this.gravitation = 0;
+            this.level = 10;
+            this.maxLevel = 10;
+            this.allowedHeight = 0;
+            this.dom = document.getElementById('ball');
+            this.counter = 0;
+          }
+
+          jump () {
+            this.vdir = 1;
+            this.gravitation = (1+level/4) * 4;
+            this.level = Math.max(1, this.level-1);
+            this.vh = 2+level/2;
+          };
+
+          update () {
+            this.allowedHeight = (this.maxLevel + 1 - this.level)*HEIGHT/this.maxLevel;
+            let factor = Math.abs(this.allowedHeight - this.bottom)/this.allowedHeight;
+            // Update vertical speed
+            this.vv = this.gravitation*Math.sqrt(factor);
+
+            // Update position internally
+            this.bottom += this.vdir*this.vv;
+            this.left += this.hdir*this.vh;
+
+            // Edge detection and direction changes (bounces)
+            if (this.bottom > this.allowedHeight) {
+              this.vdir = -1;
+            }
+            if (this.bottom < 0) {
+              this.level = Math.min(this.maxLevel, this.level+1);
+              this.vdir = 1;
+            }
+            if (this.left + 2*this.radius > WIDTH) {
+              this.hdir = -1;
+              this.counter++;
+            }
+            if (this.left < 0) {
+              this.hdir = 1;
+              this.counter++;
+            }
+
+            // Update game level
+            level = Math.max(level, 1 + Math.floor(this.counter/10));
+
+            // Update position visibly, using the internal values
+            this.dom.style.bottom = Math.max(0, this.bottom) + 'px';
+            this.dom.style.left = this.left + 'px';
+
+            return {left: this.left, bottom: this.bottom, radius: this.radius};
+          };
+
+          reset () {
+            this.counter = 0;
+            level = 1;
+          }
+
+        };
+
+        // Alien object
+        class Alien {
+          constructor (type) {
+            this.isGood = !!type;
+            this.radius = 20;
+            this.vv = 0;
+            this.vh = 0;
+            this.bottom = HEIGHT - 5;
+            this.mainBottom = HEIGHT - 5;
+            this.mainLeft = getRandomInt(WIDTH - 2*this.radius);
+            this.left = this.mainLeft;
+            this.vdir = -1;
+            this.gravitation = 3*(1+level/10);
+            this.deviation = Math.random();
+            this.dom = document.createElement('div');
+            this.dom.classList.add('alien');
+            this.dom.style.borderRadius = this.radius + 'px';
+            this.dom.style.width = (2*this.radius) + 'px';
+            this.dom.style.height = (2*this.radius) + 'px';
+            this.dom.style.backgroundColor = this.isGood ? 'green' : 'red';
+            this.points = 0;
+            document.body.appendChild(this.dom);
+          }
+
+          update (pos) {
+            const hit = isCollision(pos, {left: this.left, bottom: this.bottom, radius: this.radius})
+            if (hit) {
+              if (this.isGood) {
+                this.points++;
+              } else {
+                this.points--;
+              }
+            } else if (this.points !== 0) {
+              updatePoints(level*this.points);
+              this.dom.innerText = level*this.points;
+              this.points = 0;
+            }
+            let factor = Math.abs(HEIGHT - this.mainBottom)/HEIGHT;
+            this.vv = this.gravitation*Math.sqrt(factor);
+            this.mainBottom += this.vdir*this.vv;
+
+            /* Attempt for pendulum movement*/
+            let L = Math.min(HEIGHT - this.mainBottom, 20);
+            let V = this.deviation*(1 + level/2 - 1.5)*Math.cos(Date.now()/100);
+            let y = -L*Math.cos(V);
+            let x = L*Math.sin(V);
+
+            this.bottom = this.mainBottom + y;
+            this.left = this.mainLeft + x;
+
+            this.dom.style.bottom = this.bottom + 'px';
+            this.dom.style.left = this.left + 'px';
+
+          };
+
+        };
+
+        // Alien manager - handles the life cycle of all Aliens
+        class AlienManager {
+          constructor() {
+            //this.timer = setTimeout(this.spawn.bind(this), this.getInterval());
+            this.collision = false;
+            this.resume = false;
+            this.aliens = [];
+          }
+
+          getInterval() {
+            return (200 + getRandomInt(800))/(1+level/10);
+          }
+
+          spawn() {
+            clearTimeout(this.timer);
+            this.aliens.push(new Alien(getRandomInt(2)));
+            this.timer = setTimeout(this.spawn.bind(this), this.getInterval());
+          }
+
+          crop(all) {
+            let i = this.aliens.length;
+            let item;
+            while (this.aliens.length && i--) {
+              item = this.aliens[i];
+              if (all || item.bottom < -2*item.radius) {
+                  item.dom.remove();
+                  this.aliens.splice(i, 1);
+              }
+            }
+          }
+
+          update(pos) {
+            this.crop();
+            this.collision = false;
+            this.aliens.forEach(item => {
+              item.update(pos);
+              this.collision = this.collision || item.points !== 0;
+            });
+            freeze = this.collision;
+            if (this.resume && !this.aliens.length) {
+              this.spawn();
+              updateLevel(false);
+            }
+          }
+
+          stop() {
+            clearTimeout(this.timer);
+            //aliens = [];
+          }
+
+          next() {
+            this.resume = true;
+          }
+        }
+
+
+        // Main controller code
+        const ball = new Ball();
+        const alienManager = new AlienManager();
+        document.addEventListener('keypress', keyHandler);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible' && !paused) {
+            togglePaused();
+          }
+        });
+        window.addEventListener('resize', setSize);
+
+        let lastFreeze = false;
+        let lastLevel = 0;
+
+        // This is the game loop, called in every animationFrame
+        function loop() {
+          running = true;
+          if (paused) {
+            return;
+          }
+          if (level > lastLevel) {
+            alienManager.stop();
+            updateLevel(true);
+            alienManager.next();
+            lastLevel = level;
+          }
+          if (points < 0 && level > 1) {
+            alienManager.stop();
+            gameOver();
+            return;
+          }
+          const pos = ball.update();
+          alienManager.update(pos);
+          if (freeze) {
+            if (!lastFreeze) {
+              document.body.style.backgroundColor = 'orange';
+              lastFreeze = true;
+            }
+            setTimeout(function() {
+              window.requestAnimationFrame(loop);
+            }, 20);
+          } else {
+            if (lastFreeze) {
+              document.body.style.backgroundColor = 'white';
+              lastFreeze = false;
+            }
+            window.requestAnimationFrame(loop);
+          }
+        }
+      }
+    </script>
+</head>
+
+<body>
+  <div id="ball" class="ball"></div>
+  <div class="status">
+    <div id="pointsbox">
+      <span>Life:</span><span id="points" class="number">0</span>
+    </div>
+    <div>
+      <span>Level:</span><span id="level" class="number">0</span>
+    </div>
+  </div>
+  <div id="next">
+    Avoid Red, Go for Green<br>
+    Space bar = Jump<br>
+    Enter = New Game / Pause / Resume
+  </div>
+</body>
+
+</html>
